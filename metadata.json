@@ -1,0 +1,7 @@
+{
+  "name": "경로식당 이용자 관리",
+  "description": "Google Sheets를 DB로 사용하는 경로식당(카페마중물) 이용자 관리 PWA 웹앱",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
