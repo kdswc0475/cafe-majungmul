@@ -1,43 +1,21 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Settings, 
-  Users, 
-  QrCode, 
-  LayoutDashboard, 
-  AlertCircle,
-  PlusCircle,
-  History,
-  ShieldCheck,
-  ChevronRight,
-  LogOut,
-  Info,
-  ExternalLink,
-  TriangleAlert,
-  CheckCircle2
-} from 'lucide-react';
 import { ViewType, AppConfig, User } from './types';
-import { validateConfig, fetchUsers } from './services/sheets';
+import { validateAndGetConfig, fetchUsers } from './services/sheets';
 import { Button, Card, Input, Label } from './components/UI';
 import Dashboard from './components/Dashboard';
 import Scanner from './components/Scanner';
 import MemberManager from './components/MemberManager';
 
-// 테스트를 위해 사용자님이 제공하신 정보를 초기값으로 설정합니다.
-const TEST_API_KEY = 'AIzaSyAqwOCRQtKoQPzaGW4UAcFlA5aB2rQ4HOE';
 const DEFAULT_SHEET_ID = '1dZkKagoI5db_3fazqjFmpzSIe03tyxotpYmI_VM-5zc';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ViewType>(ViewType.DASHBOARD);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [tempConfig, setTempConfig] = useState<AppConfig>({
-    apiKey: TEST_API_KEY, // 제공된 키 자동 입력
-    sheetId: DEFAULT_SHEET_ID,
-    range: 'A:E'
-  });
+  const [inputSheetId, setInputSheetId] = useState(DEFAULT_SHEET_ID);
   const [isValidating, setIsValidating] = useState(false);
-  const [validationError, setValidationError] = useState<{message: string, link?: string, raw?: string} | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -45,8 +23,7 @@ const App: React.FC = () => {
     const savedConfig = localStorage.getItem('app_config');
     if (savedConfig) {
       try {
-        const parsed = JSON.parse(savedConfig);
-        setConfig(parsed);
+        setConfig(JSON.parse(savedConfig));
       } catch (e) {
         setIsConfigModalOpen(true);
       }
@@ -61,211 +38,139 @@ const App: React.FC = () => {
     try {
       const data = await fetchUsers(config);
       setUsers(data);
-    } catch (error) {
-      console.error(error);
+      setValidationError(null);
+    } catch (error: any) {
+      setValidationError(error.message);
     } finally {
       setLoading(false);
     }
   }, [config]);
 
   useEffect(() => {
-    if (config) {
-      loadData();
-    }
+    if (config) loadData();
   }, [config, loadData]);
 
   const handleSaveConfig = async () => {
+    if (!inputSheetId) return;
     setIsValidating(true);
     setValidationError(null);
     try {
-      const isValid = await validateConfig(tempConfig);
-      if (isValid) {
-        localStorage.setItem('app_config', JSON.stringify(tempConfig));
-        setConfig(tempConfig);
-        setIsConfigModalOpen(false);
-        alert('연결 성공! 데이터를 불러옵니다.');
-      }
+      const validConfig = await validateAndGetConfig(inputSheetId);
+      localStorage.setItem('app_config', JSON.stringify(validConfig));
+      setConfig(validConfig);
+      setIsConfigModalOpen(false);
     } catch (error: any) {
-      setValidationError({
-        message: error.message,
-        link: error.consoleLink,
-        raw: error.raw
-      });
+      setValidationError(error.message);
     } finally {
       setIsValidating(false);
     }
   };
 
-  const handleResetConfig = () => {
-    if (window.confirm('설정을 초기화하시겠습니까?')) {
-      localStorage.removeItem('app_config');
-      setConfig(null);
-      setIsConfigModalOpen(true);
-    }
-  };
-
-  const renderContent = () => {
-    if (!config) return null;
-
-    switch (activeTab) {
-      case ViewType.DASHBOARD: return <Dashboard users={users} onRefresh={loadData} />;
-      case ViewType.SCAN: return <Scanner users={users} />;
-      case ViewType.LIST: return <MemberManager users={users} config={config} onRefresh={loadData} />;
-      case ViewType.SETTINGS:
-        return (
-          <div className="p-4 space-y-4">
-            <h2 className="text-xl font-bold mb-4">앱 설정</h2>
-            <Card>
-              <div className="space-y-4">
-                <div>
-                  <Label>연결된 시트 ID</Label>
-                  <p className="text-xs break-all bg-slate-50 p-2 rounded border border-slate-200 text-slate-500 font-mono">{config.sheetId}</p>
-                </div>
-                <Button variant="danger" fullWidth onClick={handleResetConfig}>
-                  <LogOut size={20} /> 설정 초기화 및 로그아웃
-                </Button>
-              </div>
-            </Card>
-          </div>
-        );
-      default: return <Dashboard users={users} onRefresh={loadData} />;
-    }
-  };
-
   return (
-    <div className="min-h-screen pb-24 max-w-lg mx-auto bg-slate-50 relative shadow-xl">
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-5 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-            <PlusCircle size={20} />
-          </div>
-          <h1 className="text-lg font-bold text-slate-800">카페마중물</h1>
+    <div className="min-h-screen bg-slate-50 pb-20">
+      {/* Header */}
+      <div className="bg-white px-6 pt-12 pb-6 border-b border-slate-100 flex justify-between items-center sticky top-0 z-40">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+            Café <span className="text-indigo-600">Majoongmool</span>
+          </h1>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">운영 관리 시스템</p>
         </div>
-        {loading && <RefreshCcw size={16} className="text-indigo-500 animate-spin" />}
-      </header>
+        <button 
+          onClick={() => setIsConfigModalOpen(true)}
+          className="w-10 h-10 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+        >
+          <i className="fa-solid fa-database"></i>
+        </button>
+      </div>
 
-      <main className="min-h-[60vh]">{renderContent()}</main>
-
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-lg border-t border-slate-200 safe-bottom shadow-lg">
-        <div className="max-w-lg mx-auto flex items-center justify-around h-16">
-          <button onClick={() => setActiveTab(ViewType.DASHBOARD)} className={`flex flex-col items-center gap-1 transition-all ${activeTab === ViewType.DASHBOARD ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-            <LayoutDashboard size={22} /><span className="text-[10px] font-bold">홈</span>
-          </button>
-          <button onClick={() => setActiveTab(ViewType.SCAN)} className={`flex flex-col items-center gap-1 transition-all ${activeTab === ViewType.SCAN ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-            <QrCode size={22} /><span className="text-[10px] font-bold">스캔</span>
-          </button>
-          <button onClick={() => setActiveTab(ViewType.LIST)} className={`flex flex-col items-center gap-1 transition-all ${activeTab === ViewType.LIST ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-            <Users size={22} /><span className="text-[10px] font-bold">회원</span>
-          </button>
-          <button onClick={() => setActiveTab(ViewType.SETTINGS)} className={`flex flex-col items-center gap-1 transition-all ${activeTab === ViewType.SETTINGS ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-            <Settings size={22} /><span className="text-[10px] font-bold">설정</span>
-          </button>
+      {/* Error Banner */}
+      {validationError && !isConfigModalOpen && (
+        <div className="mx-4 mt-4 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 animate-pulse">
+          <i className="fa-solid fa-circle-exclamation text-rose-500"></i>
+          <p className="text-xs font-bold text-rose-800 flex-1">{validationError}</p>
+          <button onClick={loadData} className="text-rose-500 font-black text-xs underline">재시도</button>
         </div>
+      )}
+
+      <main className="max-w-md mx-auto">
+        {config ? (
+          activeTab === ViewType.DASHBOARD ? <Dashboard users={users} onRefresh={loadData} /> :
+          activeTab === ViewType.SCAN ? <Scanner users={users} /> :
+          <MemberManager users={users} config={config} onRefresh={loadData} />
+        ) : null}
+      </main>
+
+      {/* Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 flex justify-around items-center px-4 h-20 z-50">
+        {[
+          { id: ViewType.DASHBOARD, icon: 'fa-house-chimney', label: '홈' },
+          { id: ViewType.SCAN, icon: 'fa-qrcode', label: '스캔' },
+          { id: ViewType.LIST, icon: 'fa-users', label: '명단' }
+        ].map(item => (
+          <button 
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`flex flex-col items-center gap-1 transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-300'}`}
+          >
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${activeTab === item.id ? 'bg-indigo-50' : ''}`}>
+              <i className={`fa-solid ${item.icon} text-xl`}></i>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+          </button>
+        ))}
       </nav>
 
+      {/* Config Modal */}
       {isConfigModalOpen && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-6">
-          <Card className="w-full max-w-md shadow-2xl animate-in zoom-in duration-300">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mx-auto mb-4">
-                <ShieldCheck size={40} />
-              </div>
-              <h2 className="text-2xl font-black text-slate-800">연결 테스트</h2>
-              <p className="text-slate-500 text-sm mt-1">제공해주신 API 키로 연결을 시도합니다.</p>
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6">
+          <Card className="w-full max-w-sm p-10 !rounded-[50px] shadow-2xl">
+            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mb-6 text-2xl">
+              <i className="fa-solid fa-link"></i>
             </div>
-
+            <h3 className="text-2xl font-black text-slate-800 mb-2">데이터베이스 연결</h3>
+            <p className="text-sm text-slate-400 mb-8 font-medium">시트가 <span className="text-indigo-600 font-bold">공개</span> 상태여야 합니다.</p>
+            
             <div className="space-y-4">
+              <div>
+                <Label>구글 시트 ID 또는 URL</Label>
+                <Input 
+                  value={inputSheetId} 
+                  onChange={e => setInputSheetId(e.target.value)}
+                  placeholder="URL을 붙여넣으세요"
+                />
+              </div>
+              
               {validationError && (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-                  <div className="flex gap-3">
-                    <TriangleAlert size={20} className="text-rose-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-rose-800 leading-tight">{validationError.message}</p>
-                      
-                      {validationError.link && (
-                        <div className="mt-3">
-                          <a 
-                            href={validationError.link} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors"
-                          >
-                            구글 콘솔에서 활성화 확인 <ExternalLink size={12} />
-                          </a>
-                        </div>
-                      )}
-                      
-                      {validationError.raw && (
-                        <div className="mt-3 p-2 bg-rose-100/50 rounded-lg">
-                          <p className="text-[10px] font-mono text-rose-700 break-all leading-relaxed">
-                            ERROR_DETAILS: {validationError.raw}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                <div className="bg-rose-50 text-rose-500 p-4 rounded-2xl text-[11px] font-bold leading-relaxed border border-rose-100">
+                  <i className="fa-solid fa-triangle-exclamation mr-2"></i>
+                  {validationError}
                 </div>
               )}
 
-              <div>
-                <Label>Google API Key (입력됨)</Label>
-                <Input type="text" placeholder="API 키" value={tempConfig.apiKey} onChange={(e) => setTempConfig({...tempConfig, apiKey: e.target.value})} />
-              </div>
-              <div>
-                <Label>Spreadsheet ID</Label>
-                <Input placeholder="시트 ID" value={tempConfig.sheetId} onChange={(e) => setTempConfig({...tempConfig, sheetId: e.target.value})} />
-              </div>
-              
-              <Button 
-                fullWidth 
-                onClick={handleSaveConfig} 
-                disabled={isValidating || !tempConfig.apiKey}
-                className="h-14 text-lg"
-              >
-                {isValidating ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    연결 확인 중...
-                  </div>
-                ) : '연결 확인 및 테스트 시작'}
+              <Button fullWidth onClick={handleSaveConfig} disabled={isValidating} className="h-14">
+                {isValidating ? <i className="fa-solid fa-spinner animate-spin"></i> : '연결 완료'}
               </Button>
-
-              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
-                <h4 className="text-xs font-bold text-amber-800 mb-1 flex items-center gap-1">
-                  <AlertCircle size={14} /> 최종 점검 사항
-                </h4>
-                <ul className="text-[11px] text-amber-700 space-y-1 list-disc ml-3">
-                  <li>API 키가 소속된 프로젝트에서 <b>Google Sheets API</b>가 켜져 있는지</li>
-                  <li>구글 시트의 [공유] 설정이 <b>'링크가 있는 모든 사용자'</b>로 되어 있는지</li>
-                </ul>
-              </div>
+            </div>
+            
+            <div className="mt-8 p-4 bg-slate-50 rounded-2xl text-[10px] text-slate-400 font-bold leading-normal border border-slate-100">
+              <p className="mb-2 text-indigo-500"><i className="fa-solid fa-circle-info mr-1"></i> 권한 확인 방법</p>
+              <p>1. 구글 시트 우측 상단 [공유] 클릭</p>
+              <p>2. 일반 액세스를 [링크가 있는 모든 사용자]로 변경</p>
+              <p>3. 권한을 [편집자]로 설정 (등록 기능 사용 시 필수)</p>
             </div>
           </Card>
+        </div>
+      )}
+
+      {loading && !isConfigModalOpen && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+          <i className="fa-solid fa-spinner animate-spin"></i>
+          데이터 동기화 중
         </div>
       )}
     </div>
   );
 };
-
-// Simple refresh icon for the header
-const RefreshCcw = ({ size, className }: { size: number, className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
-    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-    <path d="M16 16h5v5" />
-  </svg>
-);
 
 export default App;
